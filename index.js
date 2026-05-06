@@ -16,7 +16,7 @@ const ProductRouter = require("./Controllers/productmanage");
 const ContactRouter = require("./Controllers/contactcontroller");
 const OrderRouter = require("./Controllers/ordercontroller");
 const CartRouter = require("./Controllers/cartcontroller");
-const ComplaintRouter = require("./Controllers/complaintcontroller");
+// const ComplaintRouter = require("./Controllers/complaintcontroller");
 const ReviewRouter = require("./Controllers/reviewcontroller");
 
 
@@ -27,7 +27,7 @@ app.use("/api", ProductRouter);
 app.use("/api", ContactRouter);
 app.use("/api", OrderRouter);
 app.use("/api", CartRouter);
-app.use("/api", ComplaintRouter);
+// app.use("/api", ComplaintRouter);
 app.use("/api", ReviewRouter);
 
 app.get("/", (req, res) => {

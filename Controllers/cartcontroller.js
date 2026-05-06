@@ -8,76 +8,120 @@ const Veg = require("../Model/vegmodel");
 
 router.post("/addtocart", async (req, res) => {
   try {
-    const { vegid, quantity } = req.body;
+    const authHeader = req.headers.authorization;
 
-    if (!req.headers.authorization) {
-      return res.status(401).send({success: false,message: "Authorization token required"});
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ success: false,  message: "Authorization token required",});
     }
 
-    const token = req.headers.authorization.slice(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "loginfree@1234");
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify( token,  process.env.JWT_SECRET || "loginfree@1234" );
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid token", });
+    }
+
     const userid = decoded.id;
 
-    if (!vegid || !quantity) {
-      return res.status(400).send({success: false, message: "vegid and quantity are required"});
+    const { vegid, quantity } = req.body;
+
+    if (!vegid || quantity === undefined) {
+      return res.status(400).json({ success: false,  message: "vegid and quantity are required", });
+    }
+
+    const qty = Number(quantity);
+
+    if (!Number.isFinite(qty) || qty === 0) {
+      return res.status(400).json({ success: false,  message: "Quantity must be non-zero number", });
     }
 
     if (!mongoose.Types.ObjectId.isValid(vegid)) {
-      return res.status(400).send({success: false,message: "Invalid vegid"});
+      return res.status(400).json({ success: false, message: "Invalid vegid", });
     }
 
-    if (quantity <= 0) {
-      return res.status(400).send({success: false,message: "Quantity must be greater than 0"});
-    }
-
-    const veg = await Veg.findById(vegid);
+    const veg = await Veg.findById(vegid).select("_id");
     if (!veg) {
-      return res.status(404).send({success: false,message: "Vegetable/Fruit not found"});
+      return res.status(404).json({ success: false,  message: "Item not found", });
     }
 
-    const existingCartItem = await Cart.findOne({ userid, vegid });
+    let existing = await Cart.findOne({ userid, vegid });
 
-    if (existingCartItem) {
-      existingCartItem.quantity += quantity;
-      await existingCartItem.save();
+    if (qty > 0) {
+      if (existing) {
+        existing.quantity += qty;
+        await existing.save();
 
-      return res.send({success: true,message: "Cart quantity updated",data: existingCartItem});
+        return res.json({ success: true, message: "Cart updated", data: existing, });
+      }
+
+      const cartItem = await Cart.create({ userid, vegid, quantity: qty, });
+
+      return res.json({ success: true, message: "Item added to cart",  data: cartItem, });
     }
 
-    const cartItem = await Cart.create({userid,vegid,name: veg.name,price: veg.price,quantity});
+    if (qty < 0) {
+      if (!existing) {
+        return res.status(404).json({ success: false,  message: "Item not in cart", });
+      }
 
-    res.send({success: true,message: "Item added to cart",data: cartItem});
+      existing.quantity += qty;
 
-  } catch (error) {
-    console.error("Add to cart error:", error);
-    res.status(500).send({success: false,message: "Failed to add item to cart"});
+      if (existing.quantity <= 0) {
+        await Cart.deleteOne({ _id: existing._id });
+
+        return res.json({ success: true, message: "Item removed from cart", });
+      }
+
+      await existing.save();
+
+      return res.json({ success: true, message: "Cart updated", data: existing, });
+    }
+
+  } catch (err) {
+    console.error("Add to Cart Error:", err);
+
+    return res.status(500).json({ success: false, message: "Server error", });
   }
 });
 
 
 router.get("/viewcart", async (req, res) => {
   try {
-    if (!req.headers.authorization) {
-      return res.status(401).send({success: false, message: "Authorization token required", });
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ success: false,  message: "Authorization token required", });
     }
 
-    const token = req.headers.authorization.slice(7);
-    const decoded = jwt.verify(token, "loginfree@1234");
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || "loginfree@1234");
+    } catch {
+      return res.status(401).json({ success: false, message: "Invalid token", });
+    }
+
     const userid = decoded.id;
 
-    if (!mongoose.Types.ObjectId.isValid(userid)) {
-      return res.status(400).send({success: false,message: "Invalid user id",});
-    }
-
     const cartItems = await Cart.find({ userid })
-      .populate("vegid")
-      .sort({ createdAt: -1 });
+      .populate({ path: "vegid", select: "name pricePerKg", })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.send({success: true,message: "Cart items fetched successfully",data: cartItems,});
-  } catch (error) {
-    res.status(500).send({success: false,message: "Failed to fetch cart items",});
+    const data = cartItems.map((item) => ({ _id: item._id,  productId: item.vegid?._id,  
+       name: item.vegid?.name, price: item.vegid?.pricePerKg, 
+       quantity: item.quantity, subtotal: (item.vegid?.pricePerKg || 0) * item.quantity, }));
+
+    return res.json({ success: true, count: data.length,data, });
+
+  } catch (err) {
+    console.error("viewcart error:", err);
+
+    return res.status(500).json({ success: false,message: "Failed to fetch cart",});
   }
 });
-
 
 module.exports = router;

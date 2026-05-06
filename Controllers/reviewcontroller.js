@@ -75,7 +75,7 @@ router.post("/customerreview", async (req, res) => {
 
     res.status(201).json({success: true,data: review,});
   } catch (error) {
-    res.status(500).json({success: false,message: "Submit failed",error,});
+    res.status(500).json({success: false,message: "Submit failed",error});
   }
 });
 

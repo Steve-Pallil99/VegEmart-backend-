@@ -36,29 +36,46 @@ router.post("/additem", authMiddleware, async (req, res) => {
   }
 });
 
-router.get("/viewitems", async (req, res) => {
-  const items = await VegModel.find().sort({ createdAt: -1 });
-  res.json({ success: true, data: items });
-});
-
 router.get("/viewitem/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-  
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({success: false,message: "Invalid item id",});
+    if (!id) {
+      return res.status(400).json({  success: false, message: "Product ID is required",  });
     }
 
-    const item = await VegModel.findById(id);
+    const item = await VegModel.findById(id).select( "_id name image price" );
 
     if (!item) {
-      return res.status(404).json({success: false,message: "Item not found",});
+      return res.status(404).json({  success: false,  message: "Product not found", });
     }
 
-    res.json({success: true,message: "Item fetched successfully",data: item,});
-  } catch (error) {
-    res.status(500).json({success: false,message: "Failed to fetch item",});
+    return res.status(200).json({ success: true, data: item, });
+  } catch (err) {
+    console.error("VIEW ITEM ERROR:", err);
+
+    return res.status(500).json({ success: false, message: "Server error while fetching product", });
+  }
+});
+
+router.get("/viewitems", async (req, res) => {
+  try {
+    const items = await VegModel.find({})
+      .select("_id name price image")
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: items.length,
+      data: items,
+    });
+  } catch (err) {
+    console.error("View Items Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch items",
+    });
   }
 });
 
