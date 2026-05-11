@@ -8,27 +8,25 @@ const Order = require("../Model/ordermodel");
 
 const JWT_SECRET = process.env.JWT_SECRET || "loginfree@1234";
 
-router.post("/checkout", async (req, res) => {
+router.get("/checkout/:userid", async (req, res) => {
   try {
-    const { userid, items } = req.body;
+    const orders = await Order.find({
+      userid: req.params.userid,
+    }).populate("itemid");
 
-    if (!userid || !items || items.length === 0) {
-      return res.status(400).json({ success: false, message: "Invalid checkout data", });
-    }
+    res.status(200).json({
+      success: true,
+      data: orders,
+    });
+  } catch (error) {
+    console.error(error);
 
-    const orders = await Promise.all(
-      items.map((item) =>
-        Order.create({ userid, itemid: item.itemid, itemcount: item.quantity, })
-      )
-    );
-
-    res.status(201).json({success: true, message: "Order placed successfully", data: orders,});
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({success: false, message: "Server error",});
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 });
-
 
 router.get("/getallorders", async (req, res) => {
   try {
@@ -179,27 +177,36 @@ router.get("/salessummary", async (req, res) => {
   }
 });
 
-router.get("/invoice", async (req, res) => {
+
+router.get("/getordersby", async (req, res) => {
   try {
-    const auth = req.headers.authorization;
-    if (!auth?.startsWith("Bearer ")) {
-      return res.status(401).json({
+    const { userid } = req.query;
+
+    if (!userid) {
+      return res.status(400).json({
         success: false,
-        message: "Authorization token required",
+        message: "User id is required",
       });
     }
 
-    const token = auth.split(" ")[1];
-    const { id: userid } = jwt.verify(token, JWT_SECRET);
+    const orders = await Order.find({
+      userid: userid,
+    })
+      .populate("itemid")
+      .populate("userid")
+      .sort({ createdAt: -1 });
 
-    const orders = await Order.aggregate([
-      { $match: {userid: new mongoose.Types.ObjectId(userid), }, }, { $lookup: { from: "vegetablefruits", localField: "itemid", foreignField: "_id",  as: "item", }, }, { $unwind: "$item" }, { $group: { _id: "$itemid", product: { $first: "$item.name" }, price: { $first: "$item.price" }, quantity: { $sum: "$itemcount" },},},{ $project: {_id: 0,product: 1, price: 1, quantity: 1,}, },
-    ]);
+    return res.status(200).json({
+      success: true,
+      data: orders,
+    });
+  } catch (error) {
+    console.log(error);
 
-    res.json({ success: true, data: orders,});
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Failed to fetch invoice", });
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+    });
   }
 });
 
